@@ -1,22 +1,24 @@
-import // createRefToken,
-// createRefTokenAsyncKey,
-// createToken,
-// createTokenAsyncKey,
-"../config/jwt.js";
+import {
+  createRefToken,
+  createRefTokenAsyncKey,
+  createToken,
+  createTokenAsyncKey,
+} from "../config/jwt.js";
+import sequelize from "../models/connect.js";
+import initModels from "../models/init-models.js";
 
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-// import crypto from "crypto"; // lib để tạo random code cho flow forgot password
 import { PrismaClient } from "@prisma/client";
-// import speakeasy from "speakeasy";
 
+const model = initModels(sequelize);
 const prisma = new PrismaClient();
 
 const register = async (req, res, next) => {
   try {
-    const { ho_ten, email, mat_khau, tuoi } = req.body;
-    console.log({ ho_ten, email, mat_khau, tuoi });
-    const userExist = await prisma.nguoi_dung.findFirst({
+    const { name, email, pass_word, phone, birth_day, gender, role } = req.body;
+    console.log({ name, email, pass_word, phone, birth_day, gender, role });
+    const userExist = await prisma.NguoiDung.findFirst({
       where: { email },
     });
     console.log({ userExist });
@@ -26,12 +28,17 @@ const register = async (req, res, next) => {
         .json({ message: `Tài khoản đã tồn tại`, data: null });
     }
 
-    const userNew = await prisma.nguoi_dung.create({
+    const userNew = await prisma.NguoiDung.create({
       data: {
-        ho_ten: ho_ten,
+        name: name,
         email,
-        mat_khau: bcrypt.hashSync(mat_khau, 10),
-        tuoi: Number(tuoi),
+        pass_word: bcrypt.hashSync(pass_word, 10),
+        phone: phone,
+        birth_day: isNaN(new Date(birth_day).getTime())
+          ? null
+          : new Date(birth_day),
+        gender: gender,
+        role: role,
       },
     });
 
@@ -56,37 +63,28 @@ const login = async (req, res) => {
     //   b2.2: nếu có user => check tiếp pass_word
     //     b2.2.1: nếu password không trùng nhau => ra error password is wrong
     //     b2.2.2: nếu password trùng nhau => tạo access token
-    let { email, mat_khau } = req.body;
-    let user = await prisma.nguoi_dung.findFirst({
+    let { email, pass_word } = req.body;
+    let user = await prisma.NguoiDung.findFirst({
       where: { email },
     });
     if (!user) {
       return res.status(400).json({ message: "Email is wrong" });
     }
-    let checkPass = bcrypt.compareSync(mat_khau, user.mat_khau);
+    let checkPass = bcrypt.compareSync(pass_word, user.pass_word);
     if (!checkPass) {
       return res.status(400).json({ message: "Password is wrong" });
     }
-    // let payload = { userId: user.nguoi_dung_id };
-    // tạo token
-    // funtion sign của jwt
-    // param 1: tạo payload và lưu vào token
-    // param 2: key để tạo ra token
-    // param 3: setting lifetime của token và thuật toán để tạo token
-    // let accessToken = jwt.sign({ payload }, "NODE44", {
-    //    algorithm: "HS256",
-    //    expiresIn: "1d",
-    // });
-    let accessToken = createToken({ userId: user.nguoi_dung_id });
+
+    let accessToken = createToken({ userId: user.id });
     console.log("Access Token:", accessToken);
     // tạo refresh token
-    let refreshToken = createRefToken({ userId: user.nguoi_dung_id });
+    let refreshToken = createRefToken({ userId: user.id });
     // lưu refresh token vào database
-    await prisma.nguoi_dung.update({
+    await prisma.NguoiDung.update({
       data: {
         refresh_token: refreshToken,
       },
-      where: { nguoi_dung_id: Number(user.nguoi_dung_id) },
+      where: { id: Number(user.id) },
     });
 
     // lưu refresh token vào cookie
